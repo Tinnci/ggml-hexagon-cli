@@ -11,6 +11,7 @@ import chalk from 'chalk';
 import fsExtra from 'fs-extra';
 import path from 'path';
 import inquirer from 'inquirer';
+import os from 'os';
 import { config } from '../../config.js';
 import { ensureAndroidNdk, ensureQnnSdk, ensureHexagonSdk, ANDROID_NDK_DIR, QNN_SDK_DIR, HEXAGON_SDK_DIR } from '../lib/sdk.js';
 import { executeCommand } from '../lib/system.js';
@@ -157,7 +158,9 @@ export function buildAction(options) {
             }
         }
         yield executeCommand('cmake', cmakeArgs);
-        const makeArgs = ['-C', buildDir, '-j', `${process.cpuUsage().user}`];
+        const coreCount = os.cpus().length;
+        console.log(chalk.blue(`\nDetected ${coreCount} CPU cores. Using -j ${coreCount} for make.`));
+        const makeArgs = ['-C', buildDir, '-j', `${coreCount}`];
         if (GLOBAL_VERBOSE) {
             makeArgs.push('VERBOSE=1');
         }

@@ -10,7 +10,17 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 import { execa } from 'execa';
 import chalk from 'chalk';
 import ora from 'ora';
+import os from 'os-utils';
 import { GLOBAL_VERBOSE } from '../state.js';
+function getSimpleProgress(line) {
+    if (line.startsWith('[') && line.includes('%]')) {
+        const match = line.match(/\[\s*(\d+)%\]\s(Building|Generating|Linking).*/);
+        if (match) {
+            return match[0].substring(match[0].indexOf(']') + 2);
+        }
+    }
+    return null;
+}
 /**
  * 执行一个 shell 命令并实时显示其输出
  * @param command - 要执行的命令字符串
@@ -19,16 +29,38 @@ import { GLOBAL_VERBOSE } from '../state.js';
  */
 export function executeCommand(command, args, options) {
     return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b;
+        var _a, _b, _c, _d;
         const fullCommand = `${command} ${args.join(' ')}`;
         if (GLOBAL_VERBOSE) {
             console.log(chalk.magenta(`[CMD] ${fullCommand}`));
-        }
-        const spinner = GLOBAL_VERBOSE ? null : ora(chalk.yellow(`Executing: ${fullCommand}`)).start();
-        try {
+            // 在 verbose 模式下，依然使用简单流式输出
             const subprocess = execa(command, args, options);
             (_a = subprocess.stdout) === null || _a === void 0 ? void 0 : _a.pipe(process.stdout);
             (_b = subprocess.stderr) === null || _b === void 0 ? void 0 : _b.pipe(process.stderr);
+            yield subprocess;
+            return;
+        }
+        const spinner = ora(chalk.yellow(`Executing: ${fullCommand}`)).start();
+        let interval = null;
+        try {
+            const subprocess = execa(command, args, options);
+            interval = setInterval(() => {
+                os.cpuUsage((cpuUsage) => {
+                    const cpuText = `CPU: ${(cpuUsage * 100).toFixed(1)}%`;
+                    const memText = `Mem: ${(100 * (1 - os.freememPercentage())).toFixed(1)}%`;
+                    spinner.text = `${chalk.yellow(spinner.text.split(' | ')[0])} | ${cpuText}, ${memText}`;
+                });
+            }, 1000);
+            const onData = (data) => {
+                const line = data.toString().trim();
+                const progress = getSimpleProgress(line);
+                if (progress) {
+                    const originalText = progress;
+                    spinner.text = originalText; // 更新基础文本
+                }
+            };
+            (_c = subprocess.stdout) === null || _c === void 0 ? void 0 : _c.on('data', onData);
+            (_d = subprocess.stderr) === null || _d === void 0 ? void 0 : _d.on('data', onData);
             yield subprocess;
             if (spinner)
                 spinner.succeed(chalk.green(`Successfully executed: ${fullCommand}`));
@@ -37,7 +69,12 @@ export function executeCommand(command, args, options) {
             if (spinner)
                 spinner.fail(chalk.red(`Error executing command: ${fullCommand}`));
             console.error(chalk.red(`\n❌  Error details: ${error.message}`));
-            process.exit(1); // 出错时退出
+            process.exit(1);
+        }
+        finally {
+            if (interval) {
+                clearInterval(interval);
+            }
         }
     });
 }

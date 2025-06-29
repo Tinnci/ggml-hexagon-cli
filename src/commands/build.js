@@ -14,7 +14,7 @@ import inquirer from 'inquirer';
 import { config } from '../../config.js';
 import { ensureAndroidNdk, ensureQnnSdk, ensureHexagonSdk, ANDROID_NDK_DIR, QNN_SDK_DIR, HEXAGON_SDK_DIR } from '../lib/sdk.js';
 import { executeCommand } from '../lib/system.js';
-import { GLOBAL_YES } from '../state.js';
+import { GLOBAL_YES, GLOBAL_VERBOSE } from '../state.js';
 export function buildAction(options) {
     return __awaiter(this, void 0, void 0, function* () {
         var _a;
@@ -157,7 +157,11 @@ export function buildAction(options) {
             }
         }
         yield executeCommand('cmake', cmakeArgs);
-        yield executeCommand('make', ['-C', buildDir, '-j', `${process.cpuUsage().user}`]);
+        const makeArgs = ['-C', buildDir, '-j', `${process.cpuUsage().user}`];
+        if (GLOBAL_VERBOSE) {
+            makeArgs.push('VERBOSE=1');
+        }
+        yield executeCommand('make', makeArgs);
         console.log(chalk.green.bold('🎉  构建完成！'));
     });
 }

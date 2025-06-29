@@ -3,6 +3,7 @@ import path from 'path';
 import fsExtra from 'fs-extra';
 const { pathExists } = fsExtra;
 import inquirer from 'inquirer';
+import { createWriteStream } from 'fs';
 
 import { config } from '../../config.js';
 import { checkAndPushQnnLibs } from '../lib/adb.js';
@@ -11,7 +12,7 @@ import { GLOBAL_YES } from '../state.js';
 
 const REMOTE_ANDROID_PATH = '/data/local/tmp/';
 
-export async function runTestOpsAction(options: { backend: string, op?: string }) {
+export async function runTestOpsAction(options: { backend: string, op?: string, output?: string }) {
     console.log(chalk.blue('🚀  准备运行 test-backend-ops...'));
 
     if (!GLOBAL_YES) {
@@ -46,5 +47,30 @@ export async function runTestOpsAction(options: { backend: string, op?: string }
         remoteCommand += ` -o ${options.op}`;
     }
 
-    await executeCommand('adb', ['shell', remoteCommand]);
+    const result = await executeCommand('adb', ['shell', remoteCommand], { silent: !!options.output });
+
+    let finalOutputPath = options.output;
+
+    if (!finalOutputPath && !GLOBAL_YES) {
+        const { saveOutput } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'saveOutput',
+            message: '是否要将 test-backend-ops 输出保存到文件？',
+            default: false,
+        }]);
+        if (saveOutput) {
+            const { outputPath } = await inquirer.prompt([{
+                type: 'input',
+                name: 'outputPath',
+                message: '请输入文件名 (例如: test_ops_results.txt):',
+                default: 'test_ops_output.txt',
+            }]);
+            finalOutputPath = outputPath;
+        }
+    }
+
+    if (finalOutputPath) {
+        console.log(chalk.blue(`将输出保存到文件: ${finalOutputPath}`));
+        createWriteStream(finalOutputPath).write(result.stdout + result.stderr);
+    }
 } 

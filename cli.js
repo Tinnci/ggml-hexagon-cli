@@ -131,12 +131,14 @@ program
     .description('在连接的安卓设备上运行 llama-bench')
     .option('--backend <type>', '要运行的后端构建 (cpu, hexagon)', 'hexagon')
     .option('-m, --model <path>', '要运行的本地 GGUF 模型文件路径 (不提供则会交互式选择)')
+    .option('-o, --output <path>', '将 llama-bench 输出保存到本地文件')
     .action(runBenchAction);
 program
     .command('run-test-ops')
     .description('在连接的安卓设备上运行 test-backend-ops')
     .option('--backend <type>', '要运行的后端构建 (cpu, hexagon)', 'hexagon')
     .option('-o, --op <opname>', 'Specific operation to test, e.g., ADD/MUL_MAT')
+    .option('--output <path>', '将 test-backend-ops 输出保存到本地文件')
     .action(runTestOpsAction);
 program.parse(process.argv);
 // 解析全局选项

@@ -12,6 +12,7 @@ import path from 'path';
 import fsExtra from 'fs-extra';
 const { pathExists } = fsExtra;
 import inquirer from 'inquirer';
+import { createWriteStream } from 'fs';
 import { config } from '../../config.js';
 import { checkAndPushQnnLibs } from '../lib/adb.js';
 import { executeCommand } from '../lib/system.js';
@@ -47,6 +48,28 @@ export function runTestOpsAction(options) {
         if (options.op) {
             remoteCommand += ` -o ${options.op}`;
         }
-        yield executeCommand('adb', ['shell', remoteCommand]);
+        const result = yield executeCommand('adb', ['shell', remoteCommand], { silent: !!options.output });
+        let finalOutputPath = options.output;
+        if (!finalOutputPath && !GLOBAL_YES) {
+            const { saveOutput } = yield inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'saveOutput',
+                    message: '是否要将 test-backend-ops 输出保存到文件？',
+                    default: false,
+                }]);
+            if (saveOutput) {
+                const { outputPath } = yield inquirer.prompt([{
+                        type: 'input',
+                        name: 'outputPath',
+                        message: '请输入文件名 (例如: test_ops_results.txt):',
+                        default: 'test_ops_output.txt',
+                    }]);
+                finalOutputPath = outputPath;
+            }
+        }
+        if (finalOutputPath) {
+            console.log(chalk.blue(`将输出保存到文件: ${finalOutputPath}`));
+            createWriteStream(finalOutputPath).write(result.stdout + result.stderr);
+        }
     });
 }

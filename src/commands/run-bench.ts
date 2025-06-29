@@ -9,6 +9,7 @@ import { executeCommand, IExecuteCommandOptions } from '../lib/system.js';
 import { ensureAdbDevice } from '../lib/adb.js';
 import { checkAndDownloadPrebuiltModel, scanForModels } from '../lib/models.js';
 import { GLOBAL_VERBOSE, GLOBAL_YES } from '../state.js';
+import { createWriteStream } from 'fs';
 
 const REMOTE_ANDROID_PATH = '/data/local/tmp';
 const REMOTE_MODEL_PATH = '/sdcard/';
@@ -127,7 +128,32 @@ export async function runBenchAction(options: any) {
         `--no-warmup`, // Disable warmup runs for more accurate measurement
     ];
 
-    await executeCommand('adb', ['shell', benchCommand.join(' ')]);
+    const result = await executeCommand('adb', ['shell', benchCommand.join(' ')], { silent: !!options.output });
+
+    let finalOutputPath = options.output;
+
+    if (!finalOutputPath && !GLOBAL_YES) {
+        const { saveOutput } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'saveOutput',
+            message: '是否要将 llama-bench 输出保存到文件？',
+            default: false,
+        }]);
+        if (saveOutput) {
+            const { outputPath } = await inquirer.prompt([{
+                type: 'input',
+                name: 'outputPath',
+                message: '请输入文件名 (例如: benchmark_results.txt):',
+                default: 'llama_bench_output.txt',
+            }]);
+            finalOutputPath = outputPath;
+        }
+    }
+
+    if (finalOutputPath) {
+        console.log(chalk.blue(`将输出保存到文件: ${finalOutputPath}`));
+        createWriteStream(finalOutputPath).write(result.stdout + result.stderr);
+    }
 
     console.log(chalk.green('llama-bench 运行完成。'));
 } 

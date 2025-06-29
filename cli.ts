@@ -552,6 +552,15 @@ program
   .option('--abi <abi>', 'Android ABI (arm64-v8a, armeabi-v7a 等)', 'arm64-v8a')
   .option('--cmake-args [args...]', '附加传递给 CMake 的自定义参数')
   .option('--no-clean', '增量构建（保留已有 out/android 目录）')
+  .option('--all-warnings', '启用所有编译器警告')
+  .option('--fatal-warnings', '将编译器警告视为错误 (-Werror)')
+  .option('--sanitize-thread', '启用线程消毒器 (-fsanitize=thread)')
+  .option('--sanitize-address', '启用地址消毒器 (-fsanitize=address)')
+  .option('--sanitize-undefined', '启用未定义行为消毒器 (-fsanitize=undefined)')
+  .option('--build-tests', '构建测试程序')
+  .option('--build-tools', '构建工具程序')
+  .option('--build-examples', '构建示例程序')
+  .option('--build-server', '构建服务器程序')
   .action(async (options) => {
     console.log(chalk.blue('🚀  开始构建项目...'));
 
@@ -601,6 +610,35 @@ program
       `-DHEXAGON_SDK_PATH=${HEXAGON_SDK_DIR}`,
       `-DHTP_ARCH_VERSION=${config.HTP_ARCH_VERSION}`,
     ];
+
+    // 添加新的编译选项
+    if (options.allWarnings) {
+      cmakeArgs.push('-DLLAMA_ALL_WARNINGS=ON');
+    }
+    if (options.fatalWarnings) {
+      cmakeArgs.push('-DLLAMA_FATAL_WARNINGS=ON');
+    }
+    if (options.sanitizeThread) {
+      cmakeArgs.push('-DLLAMA_SANITIZE_THREAD=ON');
+    }
+    if (options.sanitizeAddress) {
+      cmakeArgs.push('-DLLAMA_SANITIZE_ADDRESS=ON');
+    }
+    if (options.sanitizeUndefined) {
+      cmakeArgs.push('-DLLAMA_SANITIZE_UNDEFINED=ON');
+    }
+    if (options.buildTests) {
+      cmakeArgs.push('-DLLAMA_BUILD_TESTS=ON');
+    }
+    if (options.buildTools) {
+      cmakeArgs.push('-DLLAMA_BUILD_TOOLS=ON');
+    }
+    if (options.buildExamples) {
+      cmakeArgs.push('-DLLAMA_BUILD_EXAMPLES=ON');
+    }
+    if (options.buildServer) {
+      cmakeArgs.push('-DLLAMA_BUILD_SERVER=ON');
+    }
 
     // 追加用户自定义的 CMake 参数
     if (options.cmakeArgs && Array.isArray(options.cmakeArgs)) {

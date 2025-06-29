@@ -15,6 +15,15 @@ import AdmZip from 'adm-zip';
 
 const program = new Command();
 
+// === 全局选项 ===
+program
+  .option('-v, --verbose', '显示详细执行过程，不使用旋转指示器')
+  .option('-y, --yes', '自动确认所有交互提示（使用默认选项）');
+
+// 全局状态变量，稍后在 program.parse 之后赋值
+let GLOBAL_VERBOSE = false;
+let GLOBAL_YES = false;
+
 // --- 配置和常量 (可从原始脚本迁移) ---
 // 从 config.ts 中导入常量
 const MODELS_DIR = path.join(config.PROJECT_ROOT_PATH, 'models'); // 保持与之前逻辑一致，尽管扫描会向上查找
@@ -54,15 +63,18 @@ async function executeCommand(command: string, args: string[], options?: {
   shell?: boolean;
 }) {
   const fullCommand = `${command} ${args.join(' ')}`;
-  const spinner = ora(chalk.yellow(`Executing: ${fullCommand}`)).start();
+  if (GLOBAL_VERBOSE) {
+    console.log(chalk.magenta(`[CMD] ${fullCommand}`));
+  }
+  const spinner = GLOBAL_VERBOSE ? null : ora(chalk.yellow(`Executing: ${fullCommand}`)).start();
   try {
     const subprocess = execa(command, args, options);
     subprocess.stdout?.pipe(process.stdout);
     subprocess.stderr?.pipe(process.stderr);
     await subprocess;
-    spinner.succeed(chalk.green(`Successfully executed: ${fullCommand}`));
+    if (spinner) spinner.succeed(chalk.green(`Successfully executed: ${fullCommand}`));
   } catch (error: any) {
-    spinner.fail(chalk.red(`Error executing command: ${fullCommand}`));
+    if (spinner) spinner.fail(chalk.red(`Error executing command: ${fullCommand}`));
     console.error(chalk.red(`\n❌  Error details: ${error.message}`));
     process.exit(1); // 出错时退出
   }
@@ -533,7 +545,13 @@ program
 program
   .command('build')
   .description('编译整个项目 (llama.cpp + ggml-hexagon backend)')
-  .option('--debug', 'Enable debug build')
+  .option('-d, --debug', '启用 Debug 构建')
+  .option('-t, --build-type <type>', '构建类型 (Release/Debug/RelWithDebInfo/MinSizeRel)')
+  .option('--openmp', '启用 OpenMP 支持')
+  .option('--curl', '启用 LLAMA_CURL (允许从 URL 下载模型)')
+  .option('--abi <abi>', 'Android ABI (arm64-v8a, armeabi-v7a 等)', 'arm64-v8a')
+  .option('--cmake-args [args...]', '附加传递给 CMake 的自定义参数')
+  .option('--no-clean', '增量构建（保留已有 out/android 目录）')
   .action(async (options) => {
     console.log(chalk.blue('🚀  开始构建项目...'));
 
@@ -542,22 +560,72 @@ program
     await ensureHexagonSdk();
 
     const buildDir = path.join(config.PROJECT_ROOT_PATH, 'out', 'android');
-    await fsExtra.remove(buildDir); // 清理旧的构建目录
+
+    // === 处理构建目录 ===
+    if (!options.noClean && (await pathExists(buildDir))) {
+      if (GLOBAL_YES) {
+        await fsExtra.remove(buildDir);
+      } else {
+        const { confirmClean } = await inquirer.prompt([
+          {
+            type: 'confirm',
+            name: 'confirmClean',
+            message: `检测到已有构建目录 ${buildDir}，是否删除并重新构建？`,
+            default: true,
+          },
+        ]);
+        if (confirmClean) {
+          await fsExtra.remove(buildDir);
+        } else {
+          console.log(chalk.yellow('保留旧构建目录，将进行增量构建。'));
+        }
+      }
+    }
+
+    // 解析构建类型
+    const buildType: string = options.buildType ?? (options.debug ? 'Debug' : 'Release');
+    const openmpFlag = options.openmp ? 'ON' : 'OFF';
+    const curlFlag   = options.curl   ? 'ON' : 'OFF';
 
     const cmakeArgs = [
       '-S', config.PROJECT_ROOT_PATH,
       '-B', buildDir,
-      `-DCMAKE_BUILD_TYPE=${options.debug ? 'Debug' : 'Release'}`,
-      '-DGGML_OPENMP=OFF',
+      `-DCMAKE_BUILD_TYPE=${buildType}`,
+      `-DGGML_OPENMP=${openmpFlag}`,
       `-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_DIR}/build/cmake/android.toolchain.cmake`,
-      '-DANDROID_ABI=arm64-v8a',
+      `-DANDROID_ABI=${options.abi}`,
       `-DANDROID_PLATFORM=${config.ANDROID_PLATFORM}`,
       '-DGGML_HEXAGON=ON',
-      '-DLLAMA_CURL=OFF',
+      `-DLLAMA_CURL=${curlFlag}`,
       `-DQNN_SDK_PATH=${QNN_SDK_DIR}`,
       `-DHEXAGON_SDK_PATH=${HEXAGON_SDK_DIR}`,
       `-DHTP_ARCH_VERSION=${config.HTP_ARCH_VERSION}`,
     ];
+
+    // 追加用户自定义的 CMake 参数
+    if (options.cmakeArgs && Array.isArray(options.cmakeArgs)) {
+      cmakeArgs.push(...options.cmakeArgs);
+    }
+
+    // === 列出将要使用的 CMake 参数 ===
+    console.log(chalk.blue('\n📋  即将使用以下 CMake 参数：'));
+    cmakeArgs.forEach(arg => console.log('  ' + arg));
+
+    // 构建确认
+    if (!GLOBAL_YES) {
+      const { proceed } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'proceed',
+          message: '继续执行构建吗？',
+          default: true,
+        },
+      ]);
+      if (!proceed) {
+        console.log(chalk.yellow('构建已取消。'));
+        return;
+      }
+    }
 
     await executeCommand('cmake', cmakeArgs);
     await executeCommand('make', ['-C', buildDir, '-j', `${process.cpuUsage().user}`]);
@@ -729,3 +797,10 @@ program
   });
 
 program.parse(process.argv);
+
+// 解析全局选项
+const globalOpts = program.opts();
+GLOBAL_VERBOSE = !!globalOpts.verbose;
+GLOBAL_YES = !!globalOpts.yes;
+// 导出供其他模块使用（如有需要）
+export { GLOBAL_VERBOSE, GLOBAL_YES };

@@ -24,6 +24,7 @@ import { cleanAction } from './src/commands/clean.js';
 import { runAction } from './src/commands/run.js';
 import { runBenchAction } from './src/commands/run-bench.js';
 import { runTestOpsAction } from './src/commands/run-test-ops.js';
+import { cleanDeviceAction } from './src/commands/clean-device.js';
 
 const program = new Command();
 
@@ -109,6 +110,11 @@ program
   .action(cleanAction);
 
 program
+  .command('clean-device')
+  .description('删除推送到安卓设备上的所有已推送文件')
+  .action(cleanDeviceAction);
+
+program
   .command('push-libs')
   .description('推送 QNN 运行时库到安卓设备')
   .action(checkAndPushQnnLibs);
@@ -117,6 +123,20 @@ program
   .command('update-models')
   .description('下载预构建模型并推送至安卓设备')
   .action(async () => {
+    if (!GLOBAL_YES) {
+      const { confirm } = await inquirer.prompt([
+        {
+          type: 'confirm',
+          name: 'confirm',
+          message: '即将检查、下载并推送预构建模型到设备。继续吗？',
+          default: true,
+        },
+      ]);
+      if (!confirm) {
+        console.log(chalk.yellow('操作已取消。'));
+        return;
+      }
+    }
     await checkAndDownloadPrebuiltModel();
   });
 

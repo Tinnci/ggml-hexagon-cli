@@ -11,13 +11,27 @@ import chalk from 'chalk';
 import path from 'path';
 import fsExtra from 'fs-extra';
 const { pathExists } = fsExtra;
+import inquirer from 'inquirer';
 import { config } from '../../config.js';
 import { checkAndPushQnnLibs } from '../lib/adb.js';
 import { executeCommand } from '../lib/system.js';
+import { GLOBAL_YES } from '../state.js';
 const REMOTE_ANDROID_PATH = '/data/local/tmp/';
 export function runTestOpsAction(options) {
     return __awaiter(this, void 0, void 0, function* () {
         console.log(chalk.blue('🚀  准备运行 test-backend-ops...'));
+        if (!GLOBAL_YES) {
+            const { confirm } = yield inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'confirm',
+                    message: `即将推送文件并在设备上运行 test-backend-ops。继续吗？`,
+                    default: true,
+                }]);
+            if (!confirm) {
+                console.log(chalk.yellow('操作已取消。'));
+                return;
+            }
+        }
         // 确保核心库已存在于设备上
         yield checkAndPushQnnLibs();
         // 推送 test-backend-ops 可执行文件

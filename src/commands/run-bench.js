@@ -7,6 +7,7 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+import inquirer from 'inquirer';
 import chalk from 'chalk';
 import path from 'path';
 import fsExtra from 'fs-extra';
@@ -15,7 +16,7 @@ import { paths } from '../../config.js';
 import { executeCommand } from '../lib/system.js';
 import { ensureAdbDevice } from '../lib/adb.js';
 import { checkAndDownloadPrebuiltModel } from '../lib/models.js';
-import { GLOBAL_VERBOSE } from '../state.js';
+import { GLOBAL_VERBOSE, GLOBAL_YES } from '../state.js';
 const REMOTE_ANDROID_PATH = '/data/local/tmp';
 const REMOTE_MODEL_PATH = '/sdcard/';
 export function runBenchAction(options) {
@@ -28,12 +29,25 @@ export function runBenchAction(options) {
             console.error(chalk.red(`❌  未找到 llama-bench 可执行文件。请先运行 'npm run build -- --backend ${options.backend}' 进行编译。`));
             process.exit(1);
         }
+        if (!GLOBAL_YES) {
+            const { confirm } = yield inquirer.prompt([{
+                    type: 'confirm',
+                    name: 'confirm',
+                    message: `即将推送文件并在设备上运行 llama-bench。继续吗？`,
+                    default: true,
+                }]);
+            if (!confirm) {
+                console.log(chalk.yellow('操作已取消。'));
+                return;
+            }
+        }
         const remoteLlamaBenchPath = `${REMOTE_ANDROID_PATH}/llama-bench`;
         // 推送 llama-bench 可执行文件
         console.log(chalk.yellow(`推送 llama-bench 可执行文件到设备...`));
         yield executeCommand('adb', ['push', llamaBenchPath, REMOTE_ANDROID_PATH]);
         // 推送 ggml 库
         const ggmlLibs = [
+            'libllama.so',
             'libggml.so',
             'libggml-hexagon.so',
             'libggmldsp-skel.so',

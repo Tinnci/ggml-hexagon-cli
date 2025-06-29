@@ -8,7 +8,7 @@ import { config, paths } from '../../config.js';
 import { executeCommand, IExecuteCommandOptions } from '../lib/system.js';
 import { ensureAdbDevice } from '../lib/adb.js';
 import { checkAndDownloadPrebuiltModel } from '../lib/models.js';
-import { GLOBAL_VERBOSE } from '../state.js';
+import { GLOBAL_VERBOSE, GLOBAL_YES } from '../state.js';
 
 const REMOTE_ANDROID_PATH = '/data/local/tmp';
 const REMOTE_MODEL_PATH = '/sdcard/';
@@ -26,6 +26,19 @@ export async function runBenchAction(options: any) {
         process.exit(1);
     }
 
+    if (!GLOBAL_YES) {
+        const { confirm } = await inquirer.prompt([{
+            type: 'confirm',
+            name: 'confirm',
+            message: `即将推送文件并在设备上运行 llama-bench。继续吗？`,
+            default: true,
+        }]);
+        if (!confirm) {
+            console.log(chalk.yellow('操作已取消。'));
+            return;
+        }
+    }
+
     const remoteLlamaBenchPath = `${REMOTE_ANDROID_PATH}/llama-bench`;
 
     // 推送 llama-bench 可执行文件
@@ -34,6 +47,7 @@ export async function runBenchAction(options: any) {
 
     // 推送 ggml 库
     const ggmlLibs = [
+        'libllama.so',
         'libggml.so',
         'libggml-hexagon.so',
         'libggmldsp-skel.so',

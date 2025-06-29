@@ -15,7 +15,7 @@ const { pathExists } = fsExtra;
 import { paths } from '../../config.js';
 import { executeCommand } from '../lib/system.js';
 import { ensureAdbDevice } from '../lib/adb.js';
-import { checkAndDownloadPrebuiltModel } from '../lib/models.js';
+import { scanForModels } from '../lib/models.js';
 import { GLOBAL_VERBOSE, GLOBAL_YES } from '../state.js';
 const REMOTE_ANDROID_PATH = '/data/local/tmp';
 const REMOTE_MODEL_PATH = '/sdcard/';
@@ -68,25 +68,45 @@ export function runBenchAction(options) {
                 }
             }
         }
-        let modelPath = options.model;
-        let remoteModelPath = '';
-        if (!modelPath || !(yield pathExists(modelPath))) {
-            console.log(chalk.blue('使用设备上的模型，检查预构建模型是否存在...'));
-            const prebuiltModel = yield checkAndDownloadPrebuiltModel();
-            if (prebuiltModel) {
-                modelPath = prebuiltModel.localPath;
-                remoteModelPath = prebuiltModel.remotePath;
-            }
-            else {
-                console.error(chalk.red('❌  未找到模型文件。请提供本地模型路径，或确保预构建模型可用。'));
+        let selectedModel;
+        if (options.model) {
+            if (!(yield pathExists(options.model))) {
+                console.error(chalk.red(`错误：指定的模型文件不存在: ${options.model}`));
                 process.exit(1);
             }
+            selectedModel = options.model;
+            console.log(chalk.blue(`📋  使用指定的模型: ${selectedModel}`));
         }
         else {
-            remoteModelPath = path.join(REMOTE_MODEL_PATH, path.basename(modelPath));
-            console.log(chalk.blue(`本地模型 ${modelPath} 已指定，推送到设备...`));
-            yield executeCommand('adb', ['push', modelPath, REMOTE_MODEL_PATH]);
-            console.log(chalk.green('预构建模型推送完成。'));
+            console.log(chalk.blue('🔍  扫描可用模型...'));
+            const models = yield scanForModels();
+            if (models.length === 0) {
+                console.log(chalk.red('在任何搜索目录中都未找到 .gguf 模型。'));
+                console.log(chalk.yellow('请下载模型并首先放置到 models 目录中，或使用 --model <path> 指定。'));
+                process.exit(1);
+            }
+            const modelChoices = models.map(modelPath => ({
+                name: `${path.basename(modelPath)} (${path.dirname(modelPath)})`,
+                value: modelPath
+            }));
+            const answer = yield inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'selectedModel',
+                    message: '您想运行哪个模型进行基准测试？',
+                    choices: modelChoices,
+                },
+            ]);
+            selectedModel = answer.selectedModel;
+        }
+        const remoteModelPath = path.join(REMOTE_MODEL_PATH, path.basename(selectedModel));
+        try {
+            yield executeCommand('adb', ['shell', `ls ${remoteModelPath}`], { silent: true });
+            console.log(chalk.green(`模型 ${path.basename(selectedModel)} 已存在于设备上，跳过推送。`));
+        }
+        catch (error) {
+            console.log(chalk.yellow(`模型不存在于设备上，开始推送 ${path.basename(selectedModel)}...`));
+            yield executeCommand('adb', ['push', selectedModel, remoteModelPath]);
         }
         // 确保可执行文件有执行权限
         console.log(chalk.blue(`确保 ${path.join(REMOTE_ANDROID_PATH, 'llama-bench')} 有执行权限...`));

@@ -130,7 +130,7 @@ program
     .command('run-bench')
     .description('在连接的安卓设备上运行 llama-bench')
     .option('--backend <type>', '要运行的后端构建 (cpu, hexagon)', 'hexagon')
-    .option('-m, --model <path>', '要运行的本地 GGUF 模型文件路径 (默认为预构建模型)', config.GGUF_MODEL_NAME)
+    .option('-m, --model <path>', '要运行的本地 GGUF 模型文件路径 (不提供则会交互式选择)')
     .action(runBenchAction);
 program
     .command('run-test-ops')

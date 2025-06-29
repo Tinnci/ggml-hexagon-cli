@@ -7,88 +7,112 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __rest = (this && this.__rest) || function (s, e) {
+    var t = {};
+    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
+        t[p] = s[p];
+    if (s != null && typeof Object.getOwnPropertySymbols === "function")
+        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
+            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
+                t[p[i]] = s[p[i]];
+        }
+    return t;
+};
 import { execa } from 'execa';
-import chalk from 'chalk';
 import ora from 'ora';
-import os from 'os-utils';
+import chalk from 'chalk';
 import { GLOBAL_VERBOSE } from '../state.js';
-function getSimpleProgress(line) {
-    if (line.startsWith('[') && line.includes('%]')) {
-        const match = line.match(/\[\s*(\d+)%\]\s(Building|Generating|Linking).*/);
-        if (match) {
-            return match[0].substring(match[0].indexOf(']') + 2);
-        }
-    }
-    return null;
-}
 /**
- * 执行一个 shell 命令并实时显示其输出
- * @param command - 要执行的命令字符串
- * @param args - 命令的参数数组
+ * 带有 ora 指示器的命令执行器
+ * @param command - 要执行的命令
+ * @param args - 命令参数
  * @param options - execa 选项
+ * @returns
  */
-export function executeCommand(command, args, options) {
-    return __awaiter(this, void 0, void 0, function* () {
-        var _a, _b, _c, _d;
-        const fullCommand = `${command} ${args.join(' ')}`;
-        if (GLOBAL_VERBOSE) {
-            console.log(chalk.magenta(`[CMD] ${fullCommand}`));
-            // 在 verbose 模式下，依然使用简单流式输出
-            const subprocess = execa(command, args, options);
-            (_a = subprocess.stdout) === null || _a === void 0 ? void 0 : _a.pipe(process.stdout);
-            (_b = subprocess.stderr) === null || _b === void 0 ? void 0 : _b.pipe(process.stderr);
-            yield subprocess;
-            return;
+export function executeCommand(command_1, args_1) {
+    return __awaiter(this, arguments, void 0, function* (command, args, options = {}) {
+        var _a;
+        const { silent = false, ignoreExitCode = false } = options, execaOptions = __rest(options, ["silent", "ignoreExitCode"]);
+        if (GLOBAL_VERBOSE || silent) {
+            try {
+                // 在详细或静默模式下，直接继承 stdio
+                const result = yield execa(command, args, Object.assign({ stdio: 'inherit' }, execaOptions));
+                return result;
+            }
+            catch (error) {
+                const e = error;
+                if (!ignoreExitCode) {
+                    console.error(chalk.red(`❌  Error executing command: ${e.command}`));
+                    console.error(chalk.red(`❌  Error details: ${e.message}`));
+                    throw e; // 重新抛出错误，让调用者处理
+                }
+                return e; // 返回错误对象供调用者检查
+            }
         }
-        const spinner = ora(chalk.yellow(`Executing: ${fullCommand}`)).start();
+        let spinner = null;
         let interval = null;
         try {
-            const subprocess = execa(command, args, options);
-            interval = setInterval(() => {
-                os.cpuUsage((cpuUsage) => {
-                    const cpuText = `CPU: ${(cpuUsage * 100).toFixed(1)}%`;
-                    const memText = `Mem: ${(100 * (1 - os.freememPercentage())).toFixed(1)}%`;
-                    spinner.text = `${chalk.yellow(spinner.text.split(' | ')[0])} | ${cpuText}, ${memText}`;
-                });
-            }, 1000);
-            const onData = (data) => {
-                const line = data.toString().trim();
-                const progress = getSimpleProgress(line);
-                if (progress) {
-                    const originalText = progress;
-                    spinner.text = originalText; // 更新基础文本
-                }
+            const subprocess = execa(command, args, execaOptions);
+            let lastLine = '';
+            const getProgressText = () => {
+                const memUsage = process.memoryUsage();
+                const memText = `Mem: ${(memUsage.rss / 1024 / 1024).toFixed(0)}MB`;
+                let progressText = lastLine.substring(0, 60);
+                if (progressText.length < lastLine.length)
+                    progressText += '...';
+                return `[${memText}] ${progressText}`;
             };
-            (_c = subprocess.stdout) === null || _c === void 0 ? void 0 : _c.on('data', onData);
-            (_d = subprocess.stderr) === null || _d === void 0 ? void 0 : _d.on('data', onData);
-            yield subprocess;
-            if (spinner)
-                spinner.succeed(chalk.green(`Successfully executed: ${fullCommand}`));
+            spinner = ora({
+                text: `Executing: ${chalk.cyan(command)} ${args.join(' ')}`,
+                spinner: 'dots',
+            }).start();
+            (_a = subprocess.stdout) === null || _a === void 0 ? void 0 : _a.on('data', (data) => {
+                const lines = data.toString().split('\n');
+                const newLine = lines[lines.length - 2] || '';
+                if (newLine.includes('[') && newLine.includes('%]')) {
+                    lastLine = newLine;
+                }
+            });
+            // 实时状态更新
+            interval = setInterval(() => {
+                if (spinner) {
+                    spinner.text = getProgressText();
+                }
+            }, 200);
+            const result = yield subprocess;
+            if (interval)
+                clearInterval(interval);
+            spinner.succeed(`Successfully executed: ${command} ${args.join(' ')}`);
+            return result;
         }
         catch (error) {
-            if (spinner)
-                spinner.fail(chalk.red(`Error executing command: ${fullCommand}`));
-            console.error(chalk.red(`\n❌  Error details: ${error.message}`));
-            process.exit(1);
-        }
-        finally {
-            if (interval) {
+            if (interval)
                 clearInterval(interval);
+            const e = error;
+            if (spinner) {
+                spinner.fail(`Error executing command: ${command} ${args.join(' ')}`);
             }
+            if (!ignoreExitCode) {
+                console.error(chalk.red(`❌  Error details: ${e.stdout || e.stderr || e.message}`));
+                throw e;
+            }
+            return e;
         }
     });
 }
 /**
- * 检查命令是否存在于主机上
+ * 检查主机是否安装了特定命令
+ * @param command - 要检查的命令
+ * @returns
  */
-export function checkHostCommand(cmd) {
+export function checkHostCommand(command) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            yield execa('which', [cmd]);
-            console.log(chalk.green(`${cmd} 已安装`));
+            yield execa('which', [command]);
+            console.log(chalk.green(`${command} 已安装`));
         }
         catch (error) {
-            console.log(chalk.red(`${cmd} 未安装。请先安装 ${cmd}。`));
+            console.log(chalk.red(`${command} 未安装。请先安装 ${command}。`));
             process.exit(1);
         }
     });

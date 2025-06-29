@@ -1,90 +1,107 @@
-import { execa } from 'execa';
+import { execa, ExecaError, Options } from 'execa';
+import ora, { Ora } from 'ora';
 import chalk from 'chalk';
-import ora from 'ora';
-import os from 'os-utils';
 import { GLOBAL_VERBOSE } from '../state.js';
+import { performance } from 'perf_hooks';
+import os from 'os';
 
-function getSimpleProgress(line: string): string | null {
-    if (line.startsWith('[') && line.includes('%]')) {
-        const match = line.match(/\[\s*(\d+)%\]\s(Building|Generating|Linking).*/);
-        if (match) {
-            return match[0].substring(match[0].indexOf(']') + 2);
-        }
-    }
-    return null;
+// 定义一个接口，用于描述 executeCommand 的 options 对象
+export interface IExecuteCommandOptions extends Options {
+    silent?: boolean;
+    ignoreExitCode?: boolean;
 }
 
 /**
- * 执行一个 shell 命令并实时显示其输出
- * @param command - 要执行的命令字符串
- * @param args - 命令的参数数组
+ * 带有 ora 指示器的命令执行器
+ * @param command - 要执行的命令
+ * @param args - 命令参数
  * @param options - execa 选项
+ * @returns
  */
-export async function executeCommand(command: string, args: string[], options?: {
-    cwd?: string;
-    shell?: boolean;
-}) {
-    const fullCommand = `${command} ${args.join(' ')}`;
-    if (GLOBAL_VERBOSE) {
-        console.log(chalk.magenta(`[CMD] ${fullCommand}`));
-        // 在 verbose 模式下，依然使用简单流式输出
-        const subprocess = execa(command, args, options);
-        subprocess.stdout?.pipe(process.stdout);
-        subprocess.stderr?.pipe(process.stderr);
-        await subprocess;
-        return;
+export async function executeCommand(command: string, args: string[], options: IExecuteCommandOptions = {}) {
+    const { silent = false, ignoreExitCode = false, ...execaOptions } = options;
+
+    if (GLOBAL_VERBOSE || silent) {
+        try {
+            // 在详细或静默模式下，直接继承 stdio
+            const result = await execa(command, args, { stdio: 'inherit', ...execaOptions });
+            return result;
+        } catch (error) {
+            const e = error as ExecaError;
+            if (!ignoreExitCode) {
+                 console.error(chalk.red(`❌  Error executing command: ${e.command}`),);
+                 console.error(chalk.red(`❌  Error details: ${e.message}`),);
+                throw e; // 重新抛出错误，让调用者处理
+            }
+            return e; // 返回错误对象供调用者检查
+        }
     }
 
-    const spinner = ora(chalk.yellow(`Executing: ${fullCommand}`)).start();
+    let spinner: Ora | null = null;
     let interval: NodeJS.Timeout | null = null;
 
     try {
-        const subprocess = execa(command, args, options);
-
-        interval = setInterval(() => {
-            os.cpuUsage((cpuUsage: number) => {
-                const cpuText = `CPU: ${(cpuUsage * 100).toFixed(1)}%`;
-                const memText = `Mem: ${(100 * (1 - os.freememPercentage())).toFixed(1)}%`;
-                spinner.text = `${chalk.yellow(spinner.text.split(' | ')[0])} | ${cpuText}, ${memText}`;
-            });
-        }, 1000);
-
-        const onData = (data: any) => {
-            const line = data.toString().trim();
-            const progress = getSimpleProgress(line);
-            if (progress) {
-                const originalText = progress;
-                spinner.text = originalText; // 更新基础文本
-            }
-        };
-
-        subprocess.stdout?.on('data', onData);
-        subprocess.stderr?.on('data', onData);
+        const subprocess = execa(command, args, execaOptions);
         
-        await subprocess;
-
-        if (spinner) spinner.succeed(chalk.green(`Successfully executed: ${fullCommand}`));
-
-    } catch (error: any) {
-        if (spinner) spinner.fail(chalk.red(`Error executing command: ${fullCommand}`));
-        console.error(chalk.red(`\n❌  Error details: ${error.message}`));
-        process.exit(1);
-    } finally {
-        if (interval) {
-            clearInterval(interval);
+        let lastLine = '';
+        const getProgressText = () => {
+             const memUsage = process.memoryUsage();
+             const memText = `Mem: ${(memUsage.rss / 1024 / 1024).toFixed(0)}MB`;
+             let progressText = lastLine.substring(0, 60);
+             if (progressText.length < lastLine.length) progressText += '...';
+             return `[${memText}] ${progressText}`;
         }
+
+        spinner = ora({
+            text: `Executing: ${chalk.cyan(command)} ${args.join(' ')}`,
+            spinner: 'dots',
+        }).start();
+        
+        subprocess.stdout?.on('data', (data) => {
+            const lines = data.toString().split('\n');
+            const newLine = lines[lines.length - 2] || '';
+            if (newLine.includes('[') && newLine.includes('%]')) {
+                 lastLine = newLine;
+            }
+        });
+
+        // 实时状态更新
+        interval = setInterval(() => {
+            if (spinner) {
+                 spinner.text = getProgressText();
+            }
+        }, 200);
+
+        const result = await subprocess;
+        if(interval) clearInterval(interval);
+        spinner.succeed(`Successfully executed: ${command} ${args.join(' ')}`);
+        return result;
+
+    } catch (error) {
+        if(interval) clearInterval(interval);
+        const e = error as ExecaError;
+        if (spinner) {
+            spinner.fail(`Error executing command: ${command} ${args.join(' ')}`);
+        }
+        if (!ignoreExitCode) {
+            console.error(chalk.red(`❌  Error details: ${e.stdout || e.stderr || e.message}`),);
+            throw e;
+        }
+        return e;
     }
 }
 
 /**
- * 检查命令是否存在于主机上
+ * 检查主机是否安装了特定命令
+ * @param command - 要检查的命令
+ * @returns
  */
-export async function checkHostCommand(cmd: string) {
+export async function checkHostCommand(command: string) {
   try {
-    await execa('which', [cmd]);
-    console.log(chalk.green(`${cmd} 已安装`));
+    await execa('which', [command]);
+    console.log(chalk.green(`${command} 已安装`));
   } catch (error) {
-    console.log(chalk.red(`${cmd} 未安装。请先安装 ${cmd}。`));
+    console.log(chalk.red(`${command} 未安装。请先安装 ${command}。`));
     process.exit(1);
   }
 }

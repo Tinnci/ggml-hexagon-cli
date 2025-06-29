@@ -41,6 +41,7 @@ export const paths = {
     ANDROID_NDK_ZIP: path.join(PREBUILTS_DIR, `android-ndk-${config.ANDROID_NDK_VERSION}-linux.zip`),
     QNN_SDK_ZIP: path.join(PREBUILTS_DIR, `v${config.QNN_SDK_VERSION}.zip`),
     QNN_SDK_PATH: path.join(PREBUILTS_DIR, 'QNN_SDK', `qairt/${config.QNN_SDK_VERSION}/`),
+    QNN_SDK_LIBS_PATH: path.join(PREBUILTS_DIR, 'QNN_SDK', 'lib', 'aarch64-android'),
     HEXAGON_SDK_DIR: path.join(PREBUILTS_DIR, 'Hexagon_SDK'),
     HEXAGON_SDK_PATH: path.join(PREBUILTS_DIR, 'Hexagon_SDK', '6.2.0.1'),
     HEXAGON_MINIMAL_XZ: path.join(PREBUILTS_DIR, 'Hexagon_SDK', 'minimal-hexagon-sdk-6.2.0.1.xz'),

@@ -54,6 +54,7 @@ program
 program
     .command('build')
     .description('编译整个项目 (llama.cpp + ggml-hexagon backend)')
+    .option('--backend <type>', '要编译的后端 (cpu, hexagon)', 'hexagon')
     .option('-d, --debug', '启用 Debug 构建')
     .option('-t, --build-type <type>', '构建类型 (Release/Debug/RelWithDebInfo/MinSizeRel)')
     .option('--openmp', '启用 OpenMP 支持')
@@ -86,20 +87,23 @@ program
 program
     .command('run')
     .description('在连接的安卓设备上运行一个模型')
+    .option('--backend <type>', '要运行的后端构建 (cpu, hexagon)', 'hexagon')
+    .option('-m, --model <path>', '要运行的本地 GGUF 模型文件路径')
     .option('-p, --prompt <prompt>', 'Prompt string for llama-cli', config.PROMPT_STRING.trim())
     .option('-n, --tokens <tokens>', 'Number of tokens to generate', '256')
     .option('-t, --threads <threads>', 'Number of threads to use', '8')
     .option('--no-cnv', 'Disable CNV (QNN backend specific)')
-    .option('--model-path <path>', 'Full path to the model on the device', config.GGUF_MODEL_NAME)
     .action(runAction);
 program
     .command('run-bench')
     .description('在连接的安卓设备上运行 llama-bench')
-    .option('--model-path <path>', 'Full path to the model on the device', config.GGUF_MODEL_NAME)
+    .option('--backend <type>', '要运行的后端构建 (cpu, hexagon)', 'hexagon')
+    .option('-m, --model <path>', '要运行的本地 GGUF 模型文件路径 (默认为预构建模型)', config.GGUF_MODEL_NAME)
     .action(runBenchAction);
 program
     .command('run-test-ops')
     .description('在连接的安卓设备上运行 test-backend-ops')
+    .option('--backend <type>', '要运行的后端构建 (cpu, hexagon)', 'hexagon')
     .option('-o, --op <opname>', 'Specific operation to test, e.g., ADD/MUL_MAT')
     .action(runTestOpsAction);
 program.parse(process.argv);

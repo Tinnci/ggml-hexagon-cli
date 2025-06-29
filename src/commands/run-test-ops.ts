@@ -9,17 +9,17 @@ import { executeCommand } from '../lib/system.js';
 
 const REMOTE_ANDROID_PATH = '/data/local/tmp/';
 
-export async function runTestOpsAction(options: { op?: string }) {
+export async function runTestOpsAction(options: { backend: string, op?: string }) {
     console.log(chalk.blue('🚀  准备运行 test-backend-ops...'));
 
     // 确保核心库已存在于设备上
     await checkAndPushQnnLibs();
 
     // 推送 test-backend-ops 可执行文件
-    const testOpsPath = path.join(config.PROJECT_ROOT_PATH, 'out/android/bin/test-backend-ops');
+    const testOpsPath = path.join(config.PROJECT_ROOT_PATH, `out/android/${options.backend}/bin/test-backend-ops`);
     if (!(await pathExists(testOpsPath))) {
         console.log(chalk.red(`test-backend-ops 可执行文件未找到: ${testOpsPath}`));
-        console.log(chalk.yellow('请先运行 ' + chalk.cyan('ggml-hexagon-cli build') + ' 命令。'));
+        console.log(chalk.yellow('请先运行 ' + chalk.cyan(`ggml-hexagon-cli build --backend ${options.backend}`) + ' 命令。'));
         return;
     }
     await executeCommand('adb', ['push', testOpsPath, REMOTE_ANDROID_PATH]);

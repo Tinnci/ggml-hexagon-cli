@@ -21,10 +21,10 @@ export function runTestOpsAction(options) {
         // 确保核心库已存在于设备上
         yield checkAndPushQnnLibs();
         // 推送 test-backend-ops 可执行文件
-        const testOpsPath = path.join(config.PROJECT_ROOT_PATH, 'out/android/bin/test-backend-ops');
+        const testOpsPath = path.join(config.PROJECT_ROOT_PATH, `out/android/${options.backend}/bin/test-backend-ops`);
         if (!(yield pathExists(testOpsPath))) {
             console.log(chalk.red(`test-backend-ops 可执行文件未找到: ${testOpsPath}`));
-            console.log(chalk.yellow('请先运行 ' + chalk.cyan('ggml-hexagon-cli build') + ' 命令。'));
+            console.log(chalk.yellow('请先运行 ' + chalk.cyan(`ggml-hexagon-cli build --backend ${options.backend}`) + ' 命令。'));
             return;
         }
         yield executeCommand('adb', ['push', testOpsPath, REMOTE_ANDROID_PATH]);

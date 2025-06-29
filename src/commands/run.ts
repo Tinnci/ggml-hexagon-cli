@@ -13,36 +13,49 @@ const REMOTE_ANDROID_PATH = '/data/local/tmp/';
 const REMOTE_MODEL_PATH = '/sdcard/';
 
 export async function runAction(options: {
+    backend: string;
+    model?: string;
     prompt: string;
     tokens: string;
     threads: string;
     noCnv?: boolean;
-    modelPath: string;
 }) {
-    console.log(chalk.blue('🔍  扫描可用模型...'));
-    const models = await scanForModels();
+    let selectedModel: string;
 
-    if (models.length === 0) {
-        console.log(chalk.red('在任何搜索目录中都未找到 .gguf 模型。'));
-        console.log(chalk.yellow('请下载模型并首先放置到 models 目录中。'));
-        return;
+    if (options.model) {
+        if (!(await pathExists(options.model))) {
+            console.error(chalk.red(`错误：指定的模型文件不存在: ${options.model}`));
+            return;
+        }
+        selectedModel = options.model;
+        console.log(chalk.blue(`📋  使用指定的模型: ${selectedModel}`));
+    } else {
+        console.log(chalk.blue('🔍  扫描可用模型...'));
+        const models = await scanForModels();
+
+        if (models.length === 0) {
+            console.log(chalk.red('在任何搜索目录中都未找到 .gguf 模型。'));
+            console.log(chalk.yellow('请下载模型并首先放置到 models 目录中，或使用 --model <path> 指定。'));
+            return;
+        }
+
+        // 提取模型名称用于显示
+        const modelChoices = models.map(modelPath => ({
+            name: `${path.basename(modelPath)} (${path.dirname(modelPath)})`,
+            value: modelPath
+        }));
+
+        // 交互式提问
+        const answer = await inquirer.prompt([
+            {
+                type: 'list',
+                name: 'selectedModel',
+                message: '您想运行哪个模型？',
+                choices: modelChoices,
+            },
+        ]);
+        selectedModel = answer.selectedModel;
     }
-
-    // 提取模型名称用于显示
-    const modelChoices = models.map(modelPath => ({
-        name: `${path.basename(modelPath)} (${path.dirname(modelPath)})`,
-        value: modelPath
-    }));
-
-    // 交互式提问
-    const { selectedModel } = await inquirer.prompt([
-        {
-            type: 'list',
-            name: 'selectedModel',
-            message: '您想运行哪个模型？',
-            choices: modelChoices,
-        },
-    ]);
 
     const { confirmation } = await inquirer.prompt([
         {
@@ -76,10 +89,10 @@ export async function runAction(options: {
     }
 
     // 推送 llama-cli 可执行文件
-    const llamaCliPath = path.join(config.PROJECT_ROOT_PATH, 'out/android/bin/llama-cli');
+    const llamaCliPath = path.join(config.PROJECT_ROOT_PATH, `out/android/${options.backend}/bin/llama-cli`);
     if (!(await pathExists(llamaCliPath))) {
         console.log(chalk.red(`llama-cli 可执行文件未找到: ${llamaCliPath}`));
-        console.log(chalk.yellow('请先运行 ' + chalk.cyan('ggml-hexagon-cli build') + ' 命令。'));
+        console.log(chalk.yellow('请先运行 ' + chalk.cyan(`ggml-hexagon-cli build --backend ${options.backend}`) + ' 命令。'));
         return;
     }
     await executeCommand('adb', ['push', llamaCliPath, REMOTE_ANDROID_PATH]);

@@ -6,9 +6,10 @@ import inquirer from 'inquirer';
 import { config } from '../../config.js';
 import { ensureAndroidNdk, ensureQnnSdk, ensureHexagonSdk, ANDROID_NDK_DIR, QNN_SDK_DIR, HEXAGON_SDK_DIR } from '../lib/sdk.js';
 import { executeCommand } from '../lib/system.js';
-import { GLOBAL_YES } from '../state.js';
+import { GLOBAL_YES, GLOBAL_VERBOSE } from '../state.js';
 
 export async function buildAction(options: {
+    backend: string;
     debug?: boolean;
     buildType?: string;
     openmp?: boolean;
@@ -29,10 +30,18 @@ export async function buildAction(options: {
     console.log(chalk.blue('🚀  开始构建项目...'));
 
     await ensureAndroidNdk();
-    await ensureQnnSdk();
-    await ensureHexagonSdk();
+    if (options.backend === 'hexagon') {
+        console.log(chalk.blue('Building with Hexagon backend...'));
+        await ensureQnnSdk();
+        await ensureHexagonSdk();
+    } else if (options.backend === 'cpu') {
+        console.log(chalk.blue('Building with CPU backend only...'));
+    } else {
+        console.error(chalk.red(`错误：未知的后端 '${options.backend}'。有效选项为 'cpu', 'hexagon'。`));
+        return;
+    }
 
-    const buildDir = path.join(config.PROJECT_ROOT_PATH, 'out', 'android');
+    const buildDir = path.join(config.PROJECT_ROOT_PATH, 'out', 'android', options.backend);
 
     // === 处理构建目录 ===
     if (!options.noClean && (await fsExtra.pathExists(buildDir))) {
@@ -68,12 +77,17 @@ export async function buildAction(options: {
         `-DCMAKE_TOOLCHAIN_FILE=${ANDROID_NDK_DIR}/build/cmake/android.toolchain.cmake`,
         `-DANDROID_ABI=${options.abi}`,
         `-DANDROID_PLATFORM=${config.ANDROID_PLATFORM}`,
-        '-DGGML_HEXAGON=ON',
         `-DLLAMA_CURL=${curlFlag}`,
-        `-DQNN_SDK_PATH=${QNN_SDK_DIR}`,
-        `-DHEXAGON_SDK_PATH=${HEXAGON_SDK_DIR}`,
-        `-DHTP_ARCH_VERSION=${config.HTP_ARCH_VERSION}`,
     ];
+
+    if (options.backend === 'hexagon') {
+        cmakeArgs.push(
+            '-DGGML_HEXAGON=ON',
+            `-DQNN_SDK_PATH=${QNN_SDK_DIR}`,
+            `-DHEXAGON_SDK_PATH=${HEXAGON_SDK_DIR}`,
+            `-DHTP_ARCH_VERSION=${config.HTP_ARCH_VERSION}`
+        );
+    }
 
     // 添加新的编译选项
     if (options.allWarnings) cmakeArgs.push('-DLLAMA_ALL_WARNINGS=ON');
@@ -155,6 +169,12 @@ export async function buildAction(options: {
     }
 
     await executeCommand('cmake', cmakeArgs);
-    await executeCommand('make', ['-C', buildDir, '-j', `${process.cpuUsage().user}`]);
+
+    const makeArgs = ['-C', buildDir, '-j', `${process.cpuUsage().user}`];
+    if (GLOBAL_VERBOSE) {
+        makeArgs.push('VERBOSE=1');
+    }
+
+    await executeCommand('make', makeArgs);
     console.log(chalk.green.bold('🎉  构建完成！'));
 } 

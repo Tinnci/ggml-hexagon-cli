@@ -116,7 +116,9 @@ program
 program
   .command('update-models')
   .description('下载预构建模型并推送至安卓设备')
-  .action(checkAndDownloadPrebuiltModel);
+  .action(async () => {
+    await checkAndDownloadPrebuiltModel();
+  });
 
 program
   .command('run')

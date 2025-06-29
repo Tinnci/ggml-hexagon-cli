@@ -41,6 +41,7 @@ export const config = {
 
 // 基于以上配置派生的一些路径常量
 export const paths = {
+  OUT_DIR: path.join(PROJECT_ROOT_PATH, 'out'),
   ANDROID_NDK: path.join(PREBUILTS_DIR, `android-ndk-${config.ANDROID_NDK_VERSION}`),
   ANDROID_NDK_ZIP: path.join(PREBUILTS_DIR, `android-ndk-${config.ANDROID_NDK_VERSION}-linux.zip`),
   QNN_SDK_ZIP: path.join(PREBUILTS_DIR, `v${config.QNN_SDK_VERSION}.zip`),

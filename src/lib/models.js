@@ -99,7 +99,7 @@ export function checkAndDownloadPrebuiltModel() {
             // 检查手机上是否已存在模型
             yield executeCommand('adb', ['shell', `ls ${config.GGUF_MODEL_NAME}`]);
             console.log(chalk.green('预构建模型已存在于设备上，跳过下载和推送。'));
-            return;
+            return { localPath: path.join(MODELS_DIR, path.basename(config.GGUF_MODEL_NAME)), remotePath: config.GGUF_MODEL_NAME };
         }
         catch (error) {
             console.log(chalk.yellow('预构建模型不存在于设备上，开始下载和推送...'));
@@ -113,5 +113,6 @@ export function checkAndDownloadPrebuiltModel() {
         // 推送模型到设备
         yield executeCommand('adb', ['push', localModelPath, config.GGUF_MODEL_NAME]);
         console.log(chalk.green('预构建模型推送完成。'));
+        return { localPath: localModelPath, remotePath: config.GGUF_MODEL_NAME };
     });
 }

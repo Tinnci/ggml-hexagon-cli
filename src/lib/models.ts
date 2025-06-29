@@ -92,13 +92,13 @@ export async function scanForModels(): Promise<string[]> {
 /**
  * 检查并下载预构建模型
  */
-export async function checkAndDownloadPrebuiltModel() {
+export async function checkAndDownloadPrebuiltModel(): Promise<{ localPath: string; remotePath: string } | undefined> {
   console.log(chalk.blue(`检查并下载预构建模型 ${path.basename(config.GGUF_MODEL_NAME)}...`));
   try {
     // 检查手机上是否已存在模型
     await executeCommand('adb', ['shell', `ls ${config.GGUF_MODEL_NAME}`]);
     console.log(chalk.green('预构建模型已存在于设备上，跳过下载和推送。'));
-    return;
+    return { localPath: path.join(MODELS_DIR, path.basename(config.GGUF_MODEL_NAME)), remotePath: config.GGUF_MODEL_NAME };
   } catch (error) {
     console.log(chalk.yellow('预构建模型不存在于设备上，开始下载和推送...'));
   }
@@ -115,4 +115,5 @@ export async function checkAndDownloadPrebuiltModel() {
   // 推送模型到设备
   await executeCommand('adb', ['push', localModelPath, config.GGUF_MODEL_NAME]);
   console.log(chalk.green('预构建模型推送完成。'));
+  return { localPath: localModelPath, remotePath: config.GGUF_MODEL_NAME };
 } 

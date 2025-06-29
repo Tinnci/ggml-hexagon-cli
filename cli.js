@@ -1,3 +1,12 @@
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 import { Command } from 'commander';
 import fsExtra from 'fs-extra';
 const { readdir, pathExists, mkdir, ensureDir } = fsExtra;
@@ -83,7 +92,9 @@ program
 program
     .command('update-models')
     .description('下载预构建模型并推送至安卓设备')
-    .action(checkAndDownloadPrebuiltModel);
+    .action(() => __awaiter(void 0, void 0, void 0, function* () {
+    yield checkAndDownloadPrebuiltModel();
+}));
 program
     .command('run')
     .description('在连接的安卓设备上运行一个模型')

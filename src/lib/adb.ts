@@ -107,7 +107,7 @@ export async function checkAndPushQnnLibs() {
         }
     }
 
-    const cfgFile = './scripts/ggml-hexagon.cfg';
+    const cfgFile = path.join(config.PROJECT_ROOT_PATH, 'scripts', 'ggml-hexagon.cfg');
     const remoteCfgPath = `${REMOTE_ANDROID_PATH}/ggml-hexagon.cfg`;
     const checkCfg: ICommandResult = await executeCommand('adb', ['shell', `ls ${remoteCfgPath}`], {...options, ignoreExitCode: true});
     if (checkCfg.failed) {
